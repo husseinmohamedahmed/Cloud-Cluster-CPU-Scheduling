@@ -1,0 +1,59 @@
+import java.util.*;
+import java.util.Scanner;
+
+public class AdabtiveContainerScheduler
+{
+    private int quantum;
+    private int cs;
+    private List<process> listOfProcesses;
+    private TierTwoHandler tierTwo;
+    private Scanner input = new Scanner(System.in);
+    private  static int currentTime = 0;
+
+    public AdabtiveContainerScheduler(List<process> processes, int quantum, int cs)
+    {
+        for(int i=0; i < processes.size(); i++)
+        {
+            listOfProcesses.set(i, processes.get(i));
+        }
+        this.quantum = quantum;
+        this.cs = cs;
+    }
+    
+
+    public void schedule()
+    {
+        public NonPreemptivePriorityScheduler tier2;
+        public RoundRobinScheduler tier1 = new RoundRobinScheduler( quantum, cs, listOfProcesses, tier2); // tier 1 Round Robin
+
+        
+        tier1.executeScheduling();
+        int finishTime = tier1.getCurrentTime();
+        currentTime = tier2.run( finishTime, cs);
+        Aging(tier2, currentTime);
+
+        
+    }
+
+
+
+
+
+    public void Aging(NonPreemptivePriorityScheduler Queue2, int curTime)
+    {
+        int agingInterval = 5;
+        for(int i=0; i< Queue2.queue.size(); i++)
+        {
+            int waitingTime = curTime - Queue2.queue.get(i).ageOfP;
+            
+            if( waitingTime >= agingInterval)
+            {
+                int boosts = waitingTime / agingInterval;
+
+                Queue2.queue.get(i).priority = Math.max(0, Queue2.queue.get(i).priority - boosts);
+
+                Queue2.queue.get(i).ageOfP += boosts * agingInterval;
+            }
+        }
+    }
+}
