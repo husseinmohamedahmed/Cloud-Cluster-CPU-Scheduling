@@ -1,0 +1,42 @@
+import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner input = new Scanner(System.in);
+
+        System.out.print("Enter number of processes: ");
+        int n = input.nextInt();
+
+        System.out.print("Enter Time Quantum (Q): ");
+        int quantum = input.nextInt();
+
+        System.out.print("Enter Context Switch (CS): ");
+        int cs = input.nextInt();
+
+        List<process> sjfList = new ArrayList<>();
+        List<process> acsList = new ArrayList<>();
+
+        for (int i = 0; i < n; i++) {
+            System.out.print("Enter Name, Arrival, Burst, Priority: ");
+            String name = input.next();
+            int arrival = input.nextInt();
+            int burst = input.nextInt();
+            int priority = input.nextInt();
+
+            // Create two separate objects so SJF and ACS don't affect each other
+            sjfList.add(new process(name, arrival, burst, priority));
+            acsList.add(new process(name, arrival, burst, priority));
+        }
+
+        // 1. Run Preemptive SJF
+        System.out.println("\n--- Preemptive SJF ---");
+        SJF.runSJF(sjfList, cs);
+        ACS.printResults(sjfList);
+
+        // 2. Run Adaptive Container Scheduler (ACS)
+        ACS acs = new ACS(quantum, cs);
+        acs.startSimulation(acsList);
+
+        input.close();
+    }
+}

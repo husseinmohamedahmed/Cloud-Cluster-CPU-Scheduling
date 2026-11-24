@@ -1,59 +1,164 @@
 import java.util.*;
 import java.util.Scanner;
 
-public class AdabtiveContainerScheduler
-{
+public class ACS extends NonPreemptivePriorityScheduler {
+
     private int quantum;
-    private int cs;
-    private List<process> listOfProcesses;
-    private TierTwoHandler tierTwo;
-    private Scanner input = new Scanner(System.in);
-    private  static int currentTime = 0;
+    private int contextSwitch;
+    private RoundRobinScheduler tier1;
 
-    public AdabtiveContainerScheduler(List<process> processes, int quantum, int cs)
-    {
-        for(int i=0; i < processes.size(); i++)
-        {
-            listOfProcesses.set(i, processes.get(i));
-        }
+    // Three parallel LinkedLists to track Tier 2 processes, their entry time, and initial priority
+    private LinkedList<process> tier2Processes = new LinkedList<>();
+    private LinkedList<Integer> entryTimes = new LinkedList<>();
+    private LinkedList<Integer> initialPriorities = new LinkedList<>();
+
+    public ACS(int quantum, int contextSwitch) {
         this.quantum = quantum;
-        this.cs = cs;
-    }
-    
-
-    public void schedule()
-    {
-        public NonPreemptivePriorityScheduler tier2;
-        public RoundRobinScheduler tier1 = new RoundRobinScheduler( quantum, cs, listOfProcesses, tier2); // tier 1 Round Robin
-
-        
-        tier1.executeScheduling();
-        int finishTime = tier1.getCurrentTime();
-        currentTime = tier2.run( finishTime, cs);
-        Aging(tier2, currentTime);
-
-        
+        this.contextSwitch = contextSwitch;
     }
 
+    // Called automatically by RoundRobinScheduler when a process finishes its quantum
+    @Override
+    public void receiveProcess(process p) {
+        super.receiveProcess(p);
 
+        int timeEntered = 0;
+        if (tier1 != null) {
+            timeEntered = tier1.getCurrentTime();
+        }
 
+        tier2Processes.add(p);
+        entryTimes.add(timeEntered);
+        initialPriorities.add(p.priority);
+    }
 
+    // Tier 3 (Aging)
+    private void applyAging(int currentTime) {
+        for (int i = 0; i < tier2Processes.size(); i++) {
+            process p = tier2Processes.get(i);
+            int waitedTime = currentTime - entryTimes.get(i);
+            int ageBonus = waitedTime / 4;
 
-    public void Aging(NonPreemptivePriorityScheduler Queue2, int curTime)
-    {
-        int agingInterval = 5;
-        for(int i=0; i< Queue2.queue.size(); i++)
-        {
-            int waitingTime = curTime - Queue2.queue.get(i).ageOfP;
-            
-            if( waitingTime >= agingInterval)
-            {
-                int boosts = waitingTime / agingInterval;
+            int newPriority = initialPriorities.get(i) - ageBonus;
+            if (newPriority < 1) {
+                newPriority = 1;
+            }
+            p.priority = newPriority;
+        }
+    }
 
-                Queue2.queue.get(i).priority = Math.max(0, Queue2.queue.get(i).priority - boosts);
-
-                Queue2.queue.get(i).ageOfP += boosts * agingInterval;
+    // Remove the selected process from our 3 tracking LinkedLists
+    private void removeTrackedProcess(process selected) {
+        for (int i = 0; i < tier2Processes.size(); i++) {
+            if (tier2Processes.get(i) == selected) {
+                tier2Processes.remove(i);
+                entryTimes.remove(i);
+                initialPriorities.remove(i);
+                break;
             }
         }
     }
+
+    
+    @Override
+    public int run(int t, int cs) {
+        while (!queue.isEmpty()) {
+            // Update priorities before picking the next process
+            applyAging(t);
+
+            String tier2Line = "Tier 2: [";
+            for (int i = 0; i < queue.size(); i++) {
+                process item = queue.get(i);
+                tier2Line += item.name + " (remaining: " + item.remain_burst_time
+                           + ", Priority: " + item.priority + ")";
+                if (i < queue.size() - 1) {
+                    tier2Line += ", ";
+                }
+            }
+            tier2Line += "]";
+
+            process p = pickNext();
+            removeTrackedProcess(p);
+
+
+            if (cs > 0) {
+                System.out.println(t + "   Context switch loads " + p.name);
+                System.out.println("     Tier 1: [Empty]");
+                System.out.println("     " + tier2Line);
+                t = t + cs;
+                System.out.println(t + "   " + p.name);
+            } else {
+                System.out.println(t + "   " + p.name);
+                System.out.println("     Tier 1: [Empty]");
+                System.out.println("     " + tier2Line);
+            }
+
+            if (p.first_start_time == -1) {
+                p.first_start_time = t;
+            }
+
+            t = t + p.remain_burst_time;
+            p.remain_burst_time = 0;
+            p.finish_time = t;
+        }
+
+        System.out.println(t + "   Tier 1: [Empty]");
+        System.out.println("     Tier 2: [Empty]");
+        return t;
+    }
+
+    
+    public void startSimulation(List<process> processes) {
+        System.out.println("Running Adaptive Container Scheduler (ACS)");
+        System.out.println("Quantum = " + quantum + ", Context Switch = " + contextSwitch);
+
+        // 1. Run Tier 1 (Round Robin)
+        tier1 = new RoundRobinScheduler(quantum, contextSwitch, processes, this);// since ACS extends 
+        // Non-preemptive priority queue then use this to call the object itslf
+        tier1.executeScheduling();
+
+        // 2. Run Tier 2 & Tier 3 (Non-Preemptive Priority + Aging)
+        int currentTime = tier1.getCurrentTime();
+        this.run(currentTime, contextSwitch);// since ACS extends 
+        // Non-preemptive priority queue then use this to call the object itslf
+
+        // 3. Print final metrics
+        printResults(processes);
+    }
+
+    // Prints Waiting Time, Turnaround Time, Response Time, and Averages
+    public static void printResults(List<process> processes) {
+        System.out.println("Process  Arrival  Burst  Finish  Turnaround  Waiting  Response");
+
+        double totalTurnaround = 0;
+        double totalWaiting = 0;
+        double totalResponse = 0;
+
+        for (int i = 0; i < processes.size(); i++) {
+            process p = processes.get(i);
+            int turnaround = p.getturnaround_time();
+            int waiting = p.getwaiting_time();
+            int response = p.getresponse_time();
+
+            totalTurnaround += turnaround;
+            totalWaiting += waiting;
+            totalResponse += response;
+
+            System.out.println(
+                p.name + "\t " +
+                p.arrive_time + "\t  " +
+                p.burst_time + "\t " +
+                p.finish_time + "\t " +
+                turnaround + "\t\t " +
+                waiting + "\t  " +
+                response
+            );
+        }
+
+        int n = processes.size();
+        System.out.println("Average Turnaround Time: " + (totalTurnaround / n));
+        System.out.println("Average Waiting Time: " + (totalWaiting / n));
+        System.out.println("Average Response Time: " + (totalResponse / n));
+    }
+
 }
